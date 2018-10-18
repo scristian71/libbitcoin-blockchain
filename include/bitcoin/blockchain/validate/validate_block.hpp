@@ -75,13 +75,13 @@ private:
 
     // These are thread safe.
     std::atomic<bool> stopped_;
-    const bool retarget_;
     const bool use_libconsensus_;
     const config::checkpoint::list& checkpoints_;
     dispatcher& priority_dispatch_;
     mutable atomic_counter hits_;
     mutable atomic_counter queries_;
     populate_block block_populator_;
+    const bool scrypt_;
     const bc::settings& bitcoin_settings_;
 };
 

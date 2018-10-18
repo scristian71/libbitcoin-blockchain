@@ -60,7 +60,7 @@ block_chain::block_chain(threadpool& pool,
     transaction_pool_(settings),
 
     // Create dispatchers for priority and non-priority operations.
-    priority_pool_(thread_ceiling(settings.cores), priority(settings.priority)),
+    priority_pool_(thread_ceiling(settings.cores) + 1u, priority(settings.priority)),
     priority_(priority_pool_, NAME "_priority"),
     dispatch_(pool, NAME "_dispatch"),
 
@@ -68,7 +68,7 @@ block_chain::block_chain(threadpool& pool,
     block_organizer_(validation_mutex_, priority_, pool, *this, settings,
         bitcoin_settings),
     header_organizer_(validation_mutex_, priority_, pool, *this, header_pool_,
-        settings, bitcoin_settings),
+        settings.scrypt_proof_of_work, bitcoin_settings),
     transaction_organizer_(validation_mutex_, priority_, pool, *this, transaction_pool_, settings),
 
     // Subscriber thread pools are only used for unsubscribe, otherwise invoke.
@@ -249,6 +249,25 @@ bool block_chain::get_downloadable(hash_digest& out_hash, size_t height) const
     return true;
 }
 
+bool block_chain::get_validatable(hash_digest& out_hash, size_t height) const
+{
+    const auto result = database_.blocks().get(height, true);
+
+    // Do not validate if not found, valid, failed or not populated.
+    if (!result || is_valid(result.state()) || is_failed(result.state()) ||
+        result.transaction_count() == 0)
+        return false;
+
+    out_hash = result.hash();
+    return true;
+}
+
+void block_chain::prime_validation(const hash_digest& hash,
+    size_t height) const
+{
+    block_organizer_.prime_validation(hash, height);
+}
+
 void block_chain::populate_header(const chain::header& header) const
 {
     database_.blocks().get_header_metadata(header);
@@ -304,7 +323,10 @@ block_const_ptr block_chain::get_block(size_t height, bool witness,
     // False implies store corruption.
     DEBUG_ONLY(const auto value =) get_transactions(txs, result, witness);
     BITCOIN_ASSERT(value);
-    return std::make_shared<const block>(result.header(), std::move(txs));
+
+    // Use non-const header copy to obtain move construction for txs.
+    auto header = result.header();
+    return std::make_shared<const block>(std::move(header), std::move(txs));
 }
 
 header_const_ptr block_chain::get_header(size_t height, bool candidate) const
@@ -447,10 +469,10 @@ code block_chain::update(block_const_ptr block, size_t height)
         if ((error_code = database_.update(*block, height)))
             return error_code;
     }
-
-    if (metadata.validated)
+    else if (metadata.validated)
     {
-        // Set block validation state and error code.
+        // Set block validation error state and error code.
+        // Never set valid on update as validation handling would be skipped.
         error_code = database_.invalidate(block->header(), metadata.error);
     }
 
@@ -543,13 +565,27 @@ code block_chain::reorganize(block_const_ptr_list_const_ptr branch_cache,
         return error::operation_failed;
 
     code ec;
+    chain::chain_state::ptr state;
     const auto fork = fork_point();
     const auto outgoing = std::make_shared<block_const_ptr_list>();
     const auto incoming = std::make_shared<block_const_ptr_list>();
 
-    // Get all missing incoming candidates (expensive reads).
+    // Get all missing incoming candidates with chain state (expensive reads).
     for (auto height = fork.height() + 1u; height < branch_height; ++height)
-        incoming->push_back(get_block(height, true, true));
+    {
+        LOG_DEBUG(LOG_BLOCKCHAIN)
+            << "Get preceding block #" << height;
+
+        const auto block = get_block(height, true, true);
+
+        // Query chain state for first block, promote for remaining blocks.
+        state = state ?
+            promote_state(block->header(), state) :
+            chain_state(block->header(), height);
+
+        block->header().metadata.state = state;
+        incoming->push_back(block);
+    }
 
     // Append all candidate pointers from the branch cache.
     for (const auto block: *branch_cache)
@@ -827,15 +863,16 @@ bool block_chain::stop()
 {
     stopped_ = true;
 
+    const auto result =
+        block_organizer_.stop() &&
+        header_organizer_.stop() &&
+        transaction_organizer_.stop();
+
     // Critical Section
     ///////////////////////////////////////////////////////////////////////////
     validation_mutex_.lock_high_priority();
 
-    // This cannot call organize or stop (lock safe).
-    auto result =
-        block_organizer_.stop() &&
-        header_organizer_.stop() &&
-        transaction_organizer_.stop();
+    // Clean up subscriptions and threadpool now that work is coalesced.
 
     block_subscriber_->stop();
     header_subscriber_->stop();
@@ -845,7 +882,7 @@ bool block_chain::stop()
     header_subscriber_->invoke(error::service_stopped, 0, {}, {});
     transaction_subscriber_->invoke(error::service_stopped, {});
 
-    // The priority pool must not be stopped while organizing.
+    // Stop the threadpool keep-alive allowing threads to terminate.
     priority_pool_.shutdown();
 
     validation_mutex_.unlock_high_priority();
@@ -946,7 +983,9 @@ void block_chain::fetch_block(size_t height, bool witness,
         return;
     }
 
-    const auto message = std::make_shared<const block>(result.header(),
+    // Use non-const header copy to obtain move construction for txs.
+    auto header = result.header();
+    const auto message = std::make_shared<const block>(std::move(header),
         std::move(txs));
     handler(error::success, message, height);
 }
@@ -986,7 +1025,9 @@ void block_chain::fetch_block(const hash_digest& hash, bool witness,
         return;
     }
 
-    const auto message = std::make_shared<const block>(result.header(),
+    // Use non-const header copy to obtain move construction for txs.
+    auto header = result.header();
+    const auto message = std::make_shared<const block>(std::move(header),
         std::move(txs));
     handler(error::success, message, result.height());
 }
@@ -1686,7 +1727,7 @@ void block_chain::organize(header_const_ptr header, result_handler handler)
 void block_chain::organize(transaction_const_ptr tx, result_handler handler)
 {
     // The handler must not call organize (lock safety).
-    transaction_organizer_.organize(tx, handler, bitcoin_settings_.max_money);
+    transaction_organizer_.organize(tx, handler, bitcoin_settings_.max_money());
 }
 
 code block_chain::organize(block_const_ptr block, size_t height)

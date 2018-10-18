@@ -95,12 +95,20 @@ code block_organizer::organize(block_const_ptr block, size_t height)
     const auto error_code = fast_chain_.update(block, height);
     //#########################################################################
 
+    // TODO: cache block as last downloaded (for fast top validation).
     // Queue download notification to invoke validation on downloader thread.
-    ////downloader_subscriber_->relay(error_code, block, height);
+    downloader_subscriber_->relay(error_code, block->hash(), height);
 
     // Validation result is returned by metadata.error.
     // Failure code implies store corruption, caller should log.
     return error_code;
+}
+
+// TODO: refactor to eliminate this abstraction leak.
+void block_organizer::prime_validation(const hash_digest& hash,
+    size_t height) const
+{
+    downloader_subscriber_->relay(error::success, hash, height);
 }
 
 // Validate sequence.
@@ -109,7 +117,7 @@ code block_organizer::organize(block_const_ptr block, size_t height)
 // Therefore fan-outs may use all threads in the priority threadpool.
 
 // This is the start of the validation sequence.
-bool block_organizer::handle_check(const code& ec, block_const_ptr block,
+bool block_organizer::handle_check(const code& ec, const hash_digest& hash,
     size_t height)
 {
     if (ec)
@@ -120,7 +128,7 @@ bool block_organizer::handle_check(const code& ec, block_const_ptr block,
     mutex_.lock_high_priority();
 
     // If initial height is misaligned try again on next download.
-    if (height != fast_chain_.top_valid_candidate_state()->height() + 1u)
+    if (fast_chain_.top_valid_candidate_state()->height() != height - 1u)
     {
         //---------------------------------------------------------------------
         mutex_.unlock_high_priority();
@@ -129,20 +137,35 @@ bool block_organizer::handle_check(const code& ec, block_const_ptr block,
 
     // Stack up the validated blocks for possible reorganization.
     auto branch_cache = std::make_shared<block_const_ptr_list>();
-    auto current_height = height;
+    auto branch_height = height;
     code error_code;
 
-    while (!stopped() && block)
+    for (auto branch_height = height; !stopped() && height != 0; ++height)
     {
+        // TODO: check last downloaded cache first (for fast top validation).
+        // TODO: create parallel block reader (this is expensive and serial).
+        // TODO: this can run in the block populator using priority dispatch.
+        // TODO: consider metadata population in line with block read.
+        auto block = fast_chain_.get_block(height, true, true);
+
+        LOG_DEBUG(LOG_BLOCKCHAIN)
+            << "Got next block #" << height;
+
+        // If hash is misaligned we must be looking at an expired notification.
+        if (!block || fast_chain_.top_valid_candidate_state()->hash() !=
+            block->header().previous_block_hash())
+            break;
+
         // Checks that are dependent upon chain state.
         if ((error_code = validate(block)))
             break;
 
         if (block->header().metadata.error)
         {
+            // TODO: handle invalidity caching of merkle mutations.
             // Pop and mark as invalid candidates at and above block.
             //#################################################################
-            error_code = fast_chain_.invalidate(block, current_height);
+            error_code = fast_chain_.invalidate(block, height);
             //#################################################################
 
             // Candidate chain is invalid at this point so break here.
@@ -160,22 +183,32 @@ bool block_organizer::handle_check(const code& ec, block_const_ptr block,
                 break;
         }
 
+        LOG_DEBUG(LOG_BLOCKCHAIN)
+            << "Validated block #" << height << " ["
+            << encode_hash(block->hash()) << "]";
+
         if (fast_chain_.is_reorganizable())
         {
             // Reorganize this stronger candidate branch into confirmed chain.
             //#################################################################
-            error_code = fast_chain_.reorganize(branch_cache, height);
+            error_code = fast_chain_.reorganize(branch_cache, branch_height);
             //#################################################################
-            branch_cache->clear();
 
             if (error_code)
                 break;
+
+            LOG_INFO(LOG_BLOCKCHAIN)
+                << "Organized blocks [" << branch_height << "-"
+                << branch_height + branch_cache->size() - 1u << "]";
+
+            // Reset the branch for next reorganization.
+            branch_height += branch_cache->size();
+            branch_cache->clear();
         }
 
-        // TODO: create parallel block reader (this is expensive and serial).
-        // TODO: this can run in the block populator using priority dispatch.
-        // TODO: consider metadata population in line with block read.
-        block = fast_chain_.get_block(++current_height, true, true);
+        // Top valid chain state should have been updated to match the block.
+        BITCOIN_ASSERT(fast_chain_.top_valid_candidate_state()->height() ==
+            height);
     }
 
     mutex_.unlock_high_priority();
@@ -186,7 +219,7 @@ bool block_organizer::handle_check(const code& ec, block_const_ptr block,
     {
         LOG_FATAL(LOG_BLOCKCHAIN)
             << "Failure in block organization, store is now corrupt: "
-            << ec.message();
+            << error_code.message();
     }
 
     // Resubscribe if not stop or store failure.

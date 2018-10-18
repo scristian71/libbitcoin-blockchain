@@ -24,7 +24,6 @@
 #include <memory>
 #include <bitcoin/bitcoin.hpp>
 #include <bitcoin/blockchain/pools/header_branch.hpp>
-#include <bitcoin/blockchain/settings.hpp>
 
 namespace libbitcoin {
 namespace blockchain {
@@ -36,10 +35,10 @@ using namespace std::placeholders;
 #define NAME "validate_header"
 
 validate_header::validate_header(dispatcher& dispatch, const fast_chain& chain,
-    const settings& settings, const bc::settings& bitcoin_settings)
+    const bool scrypt, const bc::settings& bitcoin_settings)
   : stopped_(true),
-    retarget_(settings.retarget),
     header_populator_(dispatch, chain),
+    scrypt_(scrypt),
     bitcoin_settings_(bitcoin_settings)
 {
 }
@@ -72,9 +71,8 @@ void validate_header::stop()
 code validate_header::check(header_const_ptr header) const
 {
     // Run context free checks, even if under checkpoint or milestone.
-    return header->check(bitcoin_settings_.timestamp_future_seconds,
-        bitcoin_settings_.retarget_proof_of_work_limit,
-        bitcoin_settings_.no_retarget_proof_of_work_limit, retarget_);
+    return header->check(bitcoin_settings_.timestamp_limit_seconds,
+        bitcoin_settings_.proof_of_work_limit, scrypt_);
 }
 
 // Accept sequence.
