@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -22,19 +22,22 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/interface/fast_chain.hpp>
 
 namespace libbitcoin {
 namespace blockchain {
 
-using namespace bc::chain;
-using namespace bc::machine;
+using namespace bc::system;
+using namespace bc::system::chain;
+using namespace bc::system::machine;
 
 #define NAME "populate_block"
 
-populate_block::populate_block(dispatcher& dispatch, const fast_chain& chain)
-  : populate_base(dispatch, chain)
+populate_block::populate_block(dispatcher& dispatch, const fast_chain& chain,
+    bool catalog)
+  : populate_base(dispatch, chain),
+    catalog_(catalog)
 {
 }
 
@@ -42,9 +45,6 @@ populate_block::populate_block(dispatcher& dispatch, const fast_chain& chain)
 void populate_block::populate(block_const_ptr block,
     result_handler&& handler) const
 {
-    // The block class has no population method, so set timer externally.
-    block->metadata.start_populate = asio::steady_clock::now();
-
     // This candidate must be that which follows the top valid candidate.
     auto& metadata = block->header().metadata;
     const auto top_valid = fast_chain_.top_valid_candidate_state();
@@ -59,23 +59,15 @@ void populate_block::populate(block_const_ptr block,
     // Above this confirmed are not confirmed in the candidate chain.
     const auto fork_height = fast_chain_.fork_point().height();
 
-    // Contextual validation is bypassed under checkpoints.
-    if (metadata.state->is_under_checkpoint())
+    // Contextual validation bypassed if already validated or under checkpoint.
+    if (metadata.validated || metadata.state->is_under_checkpoint())
     {
-        // Required for prevout indexing, and is not applicable to coinbase.
-        populate_non_coinbase(block, fork_height, false, handler);
-        return;
-    }
+        // Skip prevout population if not cataloging payments.
+        if (catalog_)
+            populate_non_coinbase(block, fork_height, false, handler);
+        else
+            handler(error::success);
 
-    // If metadata was not already populated (due to existence), do it here.
-    if (!metadata.exists)
-        fast_chain_.populate_header(block->header());
-
-    // Contextual validation is bypassed if already validated.
-    if (metadata.validated)
-    {
-        // Required for prevout indexing, and is not applicable to coinbase.
-        populate_non_coinbase(block, fork_height, false, handler);
         return;
     }
 
@@ -84,7 +76,7 @@ void populate_block::populate(block_const_ptr block,
 }
 
 void populate_block::populate_non_coinbase(block_const_ptr block,
-    size_t fork_height, bool use_txs, result_handler handler) const
+    size_t fork_height, bool populate_txs, result_handler handler) const
 {
     const auto non_coinbase_inputs = block->total_non_coinbase_inputs();
 
@@ -100,7 +92,8 @@ void populate_block::populate_non_coinbase(block_const_ptr block,
 
     for (size_t bucket = 0; bucket < buckets; ++bucket)
         dispatch_.concurrent(&populate_block::populate_transactions,
-            this, block, fork_height, bucket, buckets, use_txs, join_handler);
+            this, block, fork_height, bucket, buckets, populate_txs,
+                join_handler);
 }
 
 // Initialize the coinbase input for subsequent metadata.
@@ -116,16 +109,17 @@ void populate_block::populate_coinbase(block_const_ptr block,
     // A coinbase tx guarantees exactly one input.
     auto& prevout = tx.inputs().front().previous_output().metadata;
 
-    // A coinbase input cannot be a double spend since it originates coin.
-    prevout.spent = false;
-
     // A coinbase prevout is always considered confirmed just for consistency.
     prevout.candidate = false;
     prevout.confirmed = true;
 
+    // A coinbase input has no output to have been spent.
+    prevout.candidate_spent = false;
+    prevout.confirmed_spent = false;
+
     // A coinbase does not spend a previous output so these are unused/default.
-    prevout.coinbase = false;
     prevout.height = 0;
+    prevout.coinbase = false;
     prevout.median_time_past = 0;
     prevout.cache = chain::output{};
 
@@ -134,7 +128,7 @@ void populate_block::populate_coinbase(block_const_ptr block,
 }
 
 void populate_block::populate_transactions(block_const_ptr block,
-    size_t fork_height, size_t bucket, size_t buckets, bool use_txs,
+    size_t fork_height, size_t bucket, size_t buckets, bool populate_txs,
     result_handler handler) const
 {
     BITCOIN_ASSERT(bucket < buckets);
@@ -143,7 +137,7 @@ void populate_block::populate_transactions(block_const_ptr block,
     const auto forks = state->enabled_forks();
     size_t input_position = 0;
 
-    if (use_txs)
+    if (populate_txs)
     {
         // Must skip coinbase here as it is already accounted for.
         for (auto position = (bucket == 0 ? buckets : bucket);
@@ -168,7 +162,7 @@ void populate_block::populate_transactions(block_const_ptr block,
             const auto& prevout = inputs[input_index].previous_output();
 
             // Don't fail here if output is missing, populate all.
-            /*bool*/ fast_chain_.populate_output(prevout, fork_height, true);
+            /*bool*/ fast_chain_.populate_block_output(prevout, fork_height);
         }
     }
 

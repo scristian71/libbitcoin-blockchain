@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -21,17 +21,19 @@
 #include <cstddef>
 #include <deque>
 #include <memory>
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/settings.hpp>
-#include <bitcoin/blockchain/pools/anchor_converter.hpp>
-#include <bitcoin/blockchain/pools/child_closure_calculator.hpp>
-#include <bitcoin/blockchain/pools/conflicting_spend_remover.hpp>
-#include <bitcoin/blockchain/pools/parent_closure_calculator.hpp>
-#include <bitcoin/blockchain/pools/priority_calculator.hpp>
-#include <bitcoin/blockchain/pools/transaction_order_calculator.hpp>
+#include <bitcoin/blockchain/pools/utilities/anchor_converter.hpp>
+#include <bitcoin/blockchain/pools/utilities/child_closure_calculator.hpp>
+#include <bitcoin/blockchain/pools/utilities/conflicting_spend_remover.hpp>
+#include <bitcoin/blockchain/pools/utilities/parent_closure_calculator.hpp>
+#include <bitcoin/blockchain/pools/utilities/priority_calculator.hpp>
+#include <bitcoin/blockchain/pools/utilities/transaction_order_calculator.hpp>
 
 namespace libbitcoin {
 namespace blockchain {
+
+using namespace bc::system;
 
 // Duplicate tx hashes are disallowed in a block and therefore same in pool.
 // A transaction hash that exists unspent in the chain is still not acceptable
@@ -56,7 +58,8 @@ bool transaction_pool::exists(transaction_const_ptr /*tx*/) const
 // TODO: implement (performance optimization for tx filtering via store).
 void transaction_pool::filter(get_data_ptr /*message*/) const
 {
-    BITCOIN_ASSERT_MSG(false, "not implemented");
+    // Don't crash  builds.
+    ////BITCOIN_ASSERT_MSG(false, "not implemented");
 }
 
 void transaction_pool::fetch_template(merkle_block_fetch_handler handler) const

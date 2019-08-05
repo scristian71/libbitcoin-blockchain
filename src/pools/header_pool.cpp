@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -25,14 +25,17 @@
 #include <utility>
 #include <bitcoin/blockchain/define.hpp>
 #include <bitcoin/blockchain/pools/header_branch.hpp>
+#include <bitcoin/blockchain/settings.hpp>
 
 namespace libbitcoin {
 namespace blockchain {
 
+using namespace bc::system;
 using namespace boost;
 
-header_pool::header_pool(size_t maximum_depth)
-  : maximum_depth_(maximum_depth == 0 ? max_size_t : maximum_depth)
+header_pool::header_pool(const settings& settings)
+  : maximum_depth_(settings.reorganization_limit == 0 ? max_size_t :
+      settings.reorganization_limit)
 {
 }
 
@@ -277,7 +280,7 @@ header_branch::ptr header_pool::get_branch(header_const_ptr header) const
     // A preexisting root header must have a non-zero height.
     // This precludes the need to search for the fork point for previous item.
     if (trace->size() > 1u)
-        trace->set_height(height(root->hash()) - 1u);
+        trace->set_fork_height(height(root->hash()) - 1u);
 
     return trace;
 }

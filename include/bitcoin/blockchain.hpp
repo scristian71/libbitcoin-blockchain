@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Copyright (c) 2014-2015 libbitcoin-blockchain developers (see COPYING).
+// Copyright (c) 2014-2019 libbitcoin-blockchain developers (see COPYING).
 //
 //        GENERATED SOURCE CODE, DO NOT EDIT EXCEPT EXPERIMENTALLY
 //
@@ -26,22 +26,24 @@
 #include <bitcoin/blockchain/interface/block_chain.hpp>
 #include <bitcoin/blockchain/interface/fast_chain.hpp>
 #include <bitcoin/blockchain/interface/safe_chain.hpp>
-#include <bitcoin/blockchain/organizers/block_organizer.hpp>
-#include <bitcoin/blockchain/organizers/header_organizer.hpp>
-#include <bitcoin/blockchain/organizers/transaction_organizer.hpp>
-#include <bitcoin/blockchain/pools/anchor_converter.hpp>
-#include <bitcoin/blockchain/pools/child_closure_calculator.hpp>
-#include <bitcoin/blockchain/pools/conflicting_spend_remover.hpp>
+#include <bitcoin/blockchain/organizers/organize_block.hpp>
+#include <bitcoin/blockchain/organizers/organize_header.hpp>
+#include <bitcoin/blockchain/organizers/organize_transaction.hpp>
+#include <bitcoin/blockchain/pools/block_entry.hpp>
+#include <bitcoin/blockchain/pools/block_pool.hpp>
 #include <bitcoin/blockchain/pools/header_branch.hpp>
 #include <bitcoin/blockchain/pools/header_entry.hpp>
 #include <bitcoin/blockchain/pools/header_pool.hpp>
-#include <bitcoin/blockchain/pools/parent_closure_calculator.hpp>
-#include <bitcoin/blockchain/pools/priority_calculator.hpp>
-#include <bitcoin/blockchain/pools/stack_evaluator.hpp>
 #include <bitcoin/blockchain/pools/transaction_entry.hpp>
-#include <bitcoin/blockchain/pools/transaction_order_calculator.hpp>
 #include <bitcoin/blockchain/pools/transaction_pool.hpp>
-#include <bitcoin/blockchain/pools/transaction_pool_state.hpp>
+#include <bitcoin/blockchain/pools/utilities/anchor_converter.hpp>
+#include <bitcoin/blockchain/pools/utilities/child_closure_calculator.hpp>
+#include <bitcoin/blockchain/pools/utilities/conflicting_spend_remover.hpp>
+#include <bitcoin/blockchain/pools/utilities/parent_closure_calculator.hpp>
+#include <bitcoin/blockchain/pools/utilities/priority_calculator.hpp>
+#include <bitcoin/blockchain/pools/utilities/stack_evaluator.hpp>
+#include <bitcoin/blockchain/pools/utilities/transaction_order_calculator.hpp>
+#include <bitcoin/blockchain/pools/utilities/transaction_pool_state.hpp>
 #include <bitcoin/blockchain/populate/populate_base.hpp>
 #include <bitcoin/blockchain/populate/populate_block.hpp>
 #include <bitcoin/blockchain/populate/populate_chain_state.hpp>

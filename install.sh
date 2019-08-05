@@ -1,6 +1,6 @@
 #!/bin/bash
 ###############################################################################
-#  Copyright (c) 2014-2015 libbitcoin-blockchain developers (see COPYING).
+#  Copyright (c) 2014-2019 libbitcoin-blockchain developers (see COPYING).
 #
 #         GENERATED SOURCE CODE, DO NOT EDIT EXCEPT EXPERIMENTALLY
 #
@@ -193,16 +193,8 @@ for OPTION in "$@"; do
         (--disable-static)      DISABLE_STATIC="yes";;
 
         # Common project options.
-        (--with-icu)            WITH_ICU="yes";;
-        (--with-png)            WITH_PNG="yes";;
-        (--with-qrencode)       WITH_QRENCODE="yes";;
 
         # Custom build options (in the form of --build-<option>).
-        (--build-icu)           BUILD_ICU="yes";;
-        (--build-zlib)          BUILD_ZLIB="yes";;
-        (--build-png)           BUILD_PNG="yes";;
-        (--build-qrencode)      BUILD_QRENCODE="yes";;
-        (--build-zmq)           BUILD_ZMQ="yes";;
         (--build-boost)         BUILD_BOOST="yes";;
 
         # Unique script options.
@@ -344,9 +336,9 @@ SECP256K1_OPTIONS=(
 "--disable-tests" \
 "--enable-module-recovery")
 
-# Define bitcoin options.
+# Define bitcoin-system options.
 #------------------------------------------------------------------------------
-BITCOIN_OPTIONS=(
+BITCOIN_SYSTEM_OPTIONS=(
 "--without-tests" \
 "--without-examples" \
 "${with_boost}" \
@@ -468,9 +460,15 @@ build_from_tarball()
     # Join generated and command line options.
     local CONFIGURATION=("${OPTIONS[@]}" "$@")
 
-    configure_options "${CONFIGURATION[@]}"
-    make_jobs $JOBS --silent
-    make install
+    if [[ $ARCHIVE == $MBEDTLS_ARCHIVE ]]; then
+        make -j $JOBS lib
+        make DESTDIR=$PREFIX install
+    else
+        configure_options "${CONFIGURATION[@]}"
+        make_jobs $JOBS --silent
+        make install
+    fi
+
     configure_links
 
     # Enable shared only zlib build.
@@ -716,7 +714,7 @@ build_all()
 {
     build_from_tarball_boost $BOOST_URL $BOOST_ARCHIVE bzip2 . $PARALLEL "$BUILD_BOOST" "${BOOST_OPTIONS[@]}"
     build_from_github libbitcoin secp256k1 version5 $PARALLEL ${SECP256K1_OPTIONS[@]} "$@"
-    build_from_github libbitcoin libbitcoin master $PARALLEL ${BITCOIN_OPTIONS[@]} "$@"
+    build_from_github libbitcoin libbitcoin-system master $PARALLEL ${BITCOIN_SYSTEM_OPTIONS[@]} "$@"
     build_from_github libbitcoin libbitcoin-consensus master $PARALLEL ${BITCOIN_CONSENSUS_OPTIONS[@]} "$@"
     build_from_github libbitcoin libbitcoin-database master $PARALLEL ${BITCOIN_DATABASE_OPTIONS[@]} "$@"
     build_from_travis libbitcoin libbitcoin-blockchain master $PARALLEL ${BITCOIN_BLOCKCHAIN_OPTIONS[@]} "$@"

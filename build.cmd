@@ -1,5 +1,5 @@
 REM ###########################################################################
-REM #  Copyright (c) 2014-2015 libbitcoin-blockchain developers (see COPYING).
+REM #  Copyright (c) 2014-2019 libbitcoin-blockchain developers (see COPYING).
 REM #
 REM #         GENERATED SOURCE CODE, DO NOT EDIT EXCEPT EXPERIMENTALLY
 REM #
@@ -23,9 +23,9 @@ IF NOT EXIST "%nuget_pkg_path%" (
   )
 )
 
-call :init libbitcoin libbitcoin master
+call :init libbitcoin libbitcoin-system master
 IF %ERRORLEVEL% NEQ 0 (
-  call :failure "Initializing repository libbitcoin libbitcoin master failed."
+  call :failure "Initializing repository libbitcoin libbitcoin-system master failed."
   exit /b 1
 )
 call :init libbitcoin libbitcoin-consensus master

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -20,11 +20,10 @@
 #define LIBBITCOIN_BLOCKCHAIN_HEADER_ENTRY_HPP
 
 #include <cstddef>
-#include <iostream>
-////#include <memory>
-#include <boost/functional/hash_fwd.hpp>
-#include <bitcoin/bitcoin.hpp>
+////#include <iostream>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/define.hpp>
+#include <boost/functional/hash_fwd.hpp>
 
 namespace libbitcoin {
 namespace blockchain {
@@ -33,50 +32,46 @@ namespace blockchain {
 class BCB_API header_entry
 {
 public:
-    ////typedef std::shared_ptr<transaction_entry> ptr;
-    ////typedef std::vector<ptr> list;
-
     /// Construct an entry for the pool.
-    /// Never store an invalid header in the pool.
-    header_entry(header_const_ptr header, size_t height);
+    header_entry(system::header_const_ptr header, size_t height);
 
     /// Use this construction only as a search key.
-    header_entry(const hash_digest& hash);
+    header_entry(const system::hash_digest& hash);
 
     /// The header that the entry contains.
-    header_const_ptr header() const;
+    system::header_const_ptr header() const;
 
     /// The height of the header the entry contains.
     size_t height() const;
 
     /// The hash table entry identity.
-    const hash_digest& hash() const;
+    const system::hash_digest& hash() const;
 
     /// The hash table entry's parent (preceding header) hash.
-    const hash_digest& parent() const;
+    const system::hash_digest& parent() const;
 
     /// The hash table entry's child (succeeding header) hashes.
-    const hash_list& children() const;
+    const system::hash_list& children() const;
 
     /// Add header to the list of children of this header.
-    void add_child(header_const_ptr child) const;
-
-    /// Serializer for debugging (temporary).
-    friend std::ostream& operator<<(std::ostream& out, const header_entry& of);
+    void add_child(system::header_const_ptr child) const;
 
     /// Operators.
     bool operator==(const header_entry& other) const;
 
+    /////// Serializer for debugging (temporary).
+    ////friend std::ostream& operator<<(std::ostream& out, const header_entry& of);
+
 private:
     // These are non-const to allow for default copy construction.
     size_t height_;
-    hash_digest hash_;
-    header_const_ptr header_;
+    system::hash_digest hash_;
+    system::header_const_ptr header_;
 
     // TODO: could save some bytes here by holding the pointer in place of the
     // hash. This would allow navigation to the hash saving 24 bytes per child.
     // Children do not pertain to entry hash, so must be mutable.
-    mutable hash_list children_;
+    mutable system::hash_list children_;
 };
 
 } // namespace blockchain
@@ -88,13 +83,13 @@ private:
 namespace boost
 {
 
-// Extend boost namespace with our block_const_ptr hash function.
+// Extend boost namespace with our header_entry hash function.
 template <>
 struct hash<bc::blockchain::header_entry>
 {
     size_t operator()(const bc::blockchain::header_entry& entry) const
     {
-        return boost::hash<bc::hash_digest>()(entry.hash());
+        return boost::hash<bc::system::hash_digest>()(entry.hash());
     }
 };
 

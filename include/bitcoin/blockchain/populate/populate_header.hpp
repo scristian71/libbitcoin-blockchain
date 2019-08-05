@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -19,7 +19,7 @@
 #ifndef LIBBITCOIN_BLOCKCHAIN_POPULATE_HEADER_HPP
 #define LIBBITCOIN_BLOCKCHAIN_POPULATE_HEADER_HPP
 
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/define.hpp>
 #include <bitcoin/blockchain/interface/fast_chain.hpp>
 #include <bitcoin/blockchain/pools/header_branch.hpp>
@@ -33,7 +33,7 @@ class BCB_API populate_header
   : public populate_base
 {
 public:
-    populate_header(dispatcher& dispatch, const fast_chain& chain);
+    populate_header(system::dispatcher& dispatch, const fast_chain& chain);
 
     /// Populate validation state for the top indexed block.
     void populate(header_branch::ptr branch, result_handler&& handler) const;

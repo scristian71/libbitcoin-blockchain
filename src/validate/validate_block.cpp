@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -24,7 +24,7 @@
 #include <functional>
 #include <iterator>
 #include <memory>
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/interface/fast_chain.hpp>
 #include <bitcoin/blockchain/settings.hpp>
 #include <bitcoin/blockchain/validate/validate_input.hpp>
@@ -32,19 +32,20 @@
 namespace libbitcoin {
 namespace blockchain {
 
-using namespace bc::chain;
-using namespace bc::machine;
+using namespace bc::system;
+using namespace bc::system::chain;
+using namespace bc::system::machine;
 using namespace std::placeholders;
 
 #define NAME "validate_block"
 
 validate_block::validate_block(dispatcher& dispatch, const fast_chain& chain,
-    const settings& settings, const bc::settings& bitcoin_settings)
+    const settings& settings, const system::settings& bitcoin_settings)
   : stopped_(true),
     use_libconsensus_(settings.use_libconsensus),
     checkpoints_(settings.checkpoints),
     priority_dispatch_(dispatch),
-    block_populator_(dispatch, chain),
+    block_populator_(dispatch, chain, settings.index_payments),
     scrypt_(settings.scrypt_proof_of_work),
     bitcoin_settings_(bitcoin_settings)
 {
@@ -77,6 +78,8 @@ void validate_block::stop()
 
 void validate_block::check(block_const_ptr block, size_t height) const
 {
+    const auto start_check = asio::steady_clock::now();
+
     auto& metadata = block->header().metadata;
 
     if (!config::checkpoint::validate(block->hash(), height, checkpoints_))
@@ -93,12 +96,14 @@ void validate_block::check(block_const_ptr block, size_t height) const
     }
     else
     {
-        // Run context free checks, block is not yet fully validated.
+        // Run context free checks, block is partially validated.
         metadata.error = block->check(bitcoin_settings_.max_money(),
             bitcoin_settings_.timestamp_limit_seconds,
-            bitcoin_settings_.proof_of_work_limit, scrypt_);
+            bitcoin_settings_.proof_of_work_limit, scrypt_, false);
         metadata.validated = false;
     }
+
+    block->metadata.check = asio::steady_clock::now() - start_check;
 }
 
 // Accept sequence.
@@ -111,12 +116,12 @@ void validate_block::accept(block_const_ptr block,
     // Returns store code only.
     block_populator_.populate(block,
         std::bind(&validate_block::handle_populated,
-            this, _1, block, handler));
+            this, _1, block, asio::steady_clock::now(), handler));
 }
 
 // Returns store code only.
 void validate_block::handle_populated(const code& ec, block_const_ptr block,
-    result_handler handler) const
+    asio::time_point start_time, result_handler handler) const
 {
     if (stopped())
     {
@@ -130,6 +135,7 @@ void validate_block::handle_populated(const code& ec, block_const_ptr block,
         return;
     }
 
+    block->metadata.populate = asio::steady_clock::now() - start_time;
     auto& metadata = block->header().metadata;
 
     if (metadata.validated)
@@ -160,7 +166,7 @@ void validate_block::handle_populated(const code& ec, block_const_ptr block,
 
     result_handler complete_handler =
         std::bind(&validate_block::handle_accepted,
-            this, _1, block, sigops, bip141, handler);
+            this, _1, block, sigops, bip141, asio::steady_clock::now(), handler);
 
     // The threadpool must be initialized with at least 2 threads.
     // One dedicated thread is required by the validation subscriber.
@@ -201,7 +207,8 @@ void validate_block::accept_transactions(block_const_ptr block, size_t bucket,
 
 // Returns store code only.
 void validate_block::handle_accepted(const code& ec, block_const_ptr block,
-    atomic_counter_ptr sigops, bool bip141, result_handler handler) const
+    atomic_counter_ptr sigops, bool bip141, asio::time_point start_time,
+    result_handler handler) const
 {
     if (ec)
     {
@@ -213,6 +220,7 @@ void validate_block::handle_accepted(const code& ec, block_const_ptr block,
             block->header().metadata.error = error::block_embedded_sigop_limit;
     }
 
+    block->metadata.accept = asio::steady_clock::now() - start_time;
     handler(error::success);
 }
 
@@ -224,9 +232,6 @@ void validate_block::handle_accepted(const code& ec, block_const_ptr block,
 void validate_block::connect(block_const_ptr block,
     result_handler handler) const
 {
-    // We are reimplementing connect, so must set timer externally.
-    block->metadata.start_connect = asio::steady_clock::now();
-
     const auto state = block->header().metadata.state;
     BITCOIN_ASSERT(state);
 
@@ -251,7 +256,7 @@ void validate_block::connect(block_const_ptr block,
 
     result_handler complete_handler =
         std::bind(&validate_block::handle_connected,
-            this, _1, block, handler);
+            this, _1, block, asio::steady_clock::now(), handler);
 
     // The threadpool must be initialized with at least 2 threads.
     // One dedicated thread is required by the validation subscriber.
@@ -342,8 +347,9 @@ float validate_block::hit_rate() const
 
 // Returns store code only.
 void validate_block::handle_connected(const code& ec, block_const_ptr block,
-    result_handler handler) const
+    asio::time_point start_time, result_handler handler) const
 {
+    block->metadata.connect = asio::steady_clock::now() - start_time;
     block->metadata.cache_efficiency = hit_rate();
     handler(ec);
 }

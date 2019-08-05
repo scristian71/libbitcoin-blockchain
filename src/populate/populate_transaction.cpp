@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -22,14 +22,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/define.hpp>
 #include <bitcoin/blockchain/interface/fast_chain.hpp>
 
 namespace libbitcoin {
 namespace blockchain {
 
-using namespace bc::chain;
+using namespace bc::system;
+using namespace bc::system::chain;
 using namespace std::placeholders;
 
 #define NAME "populate_transaction"
@@ -88,7 +89,7 @@ void populate_transaction::populate_inputs(transaction_const_ptr tx,
         const auto& prevout = input.previous_output();
 
         // Don't fail here if output is missing, populate all.
-        /*bool*/ fast_chain_.populate_output(prevout, max_size_t, false);
+        /*bool*/ fast_chain_.populate_pool_output(prevout);
     }
 
     handler(error::success);

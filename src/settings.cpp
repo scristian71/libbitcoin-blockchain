@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -23,15 +23,19 @@
 namespace libbitcoin {
 namespace blockchain {
 
+using namespace bc::system;
+
 settings::settings()
   : cores(0),
     priority(true),
+    index_payments(true),
     use_libconsensus(false),
     byte_fee_satoshis(1),
     sigop_fee_satoshis(100),
     minimum_output_satoshis(500),
     notify_limit_hours(24),
     reorganization_limit(0),
+    block_buffer_limit(0),
     difficult(true),
     retarget(true),
     bip16(true),

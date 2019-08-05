@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -20,7 +20,7 @@
 #define LIBBITCOIN_BLOCKCHAIN_POPULATE_BLOCK_HPP
 
 #include <cstddef>
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/define.hpp>
 #include <bitcoin/blockchain/interface/fast_chain.hpp>
 #include <bitcoin/blockchain/pools/header_branch.hpp>
@@ -34,18 +34,24 @@ class BCB_API populate_block
   : public populate_base
 {
 public:
-    populate_block(dispatcher& dispatch, const fast_chain& chain);
+    populate_block(system::dispatcher& dispatch, const fast_chain& chain,
+        bool catalog);
 
     /// Populate validation state for the the next block.
-    void populate(block_const_ptr block, result_handler&& handler) const;
+    void populate(system::block_const_ptr block,
+        result_handler&& handler) const;
 
 protected:
-    void populate_coinbase(block_const_ptr block, size_t fork_height) const;
-    void populate_non_coinbase(block_const_ptr block, size_t fork_height,
-        bool use_txs, result_handler handler) const;
-    void populate_transactions(block_const_ptr block, size_t fork_height,
-        size_t bucket, size_t buckets, bool use_txs,
+    void populate_coinbase(system::block_const_ptr block,
+        size_t fork_height) const;
+    void populate_non_coinbase(system::block_const_ptr block,
+        size_t fork_height, bool use_txs, result_handler handler) const;
+    void populate_transactions(system::block_const_ptr block,
+        size_t fork_height, size_t bucket, size_t buckets, bool populate_txs,
         result_handler handler) const;
+
+private:
+    const bool catalog_;
 };
 
 } // namespace blockchain

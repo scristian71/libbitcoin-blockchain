@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -31,8 +31,9 @@
 
 using namespace bc;
 using namespace bc::blockchain;
-using namespace bc::chain;
 using namespace bc::database;
+using namespace bc::system;
+using namespace bc::system::chain;
 using namespace boost::filesystem;
 using namespace boost::system;
 using boost::format;
@@ -61,9 +62,9 @@ int main(int argc, char** argv)
     }
 
     database::settings settings(config::settings::mainnet);
-    const bc::settings bitcoin_settings(config::settings::mainnet);
+    const system::settings bitcoin_settings(config::settings::mainnet);
 
-    if (!data_base(settings).create(bitcoin_settings.genesis_block))
+    if (!data_base(settings, true).create(bitcoin_settings.genesis_block))
     {
         std::cerr << BS_INITCHAIN_FAIL;
         return -1;

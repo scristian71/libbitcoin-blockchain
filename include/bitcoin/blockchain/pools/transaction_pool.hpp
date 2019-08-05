@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -21,15 +21,15 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <boost/bimap.hpp>
-#include <boost/bimap/multiset_of.hpp>
-#include <boost/bimap/unordered_set_of.hpp>
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/define.hpp>
 #include <bitcoin/blockchain/interface/safe_chain.hpp>
 #include <bitcoin/blockchain/settings.hpp>
 #include <bitcoin/blockchain/pools/transaction_entry.hpp>
-#include <bitcoin/blockchain/pools/transaction_pool_state.hpp>
+#include <bitcoin/blockchain/pools/utilities/transaction_pool_state.hpp>
+#include <boost/bimap.hpp>
+#include <boost/bimap/multiset_of.hpp>
+#include <boost/bimap/unordered_set_of.hpp>
 
 namespace libbitcoin {
 namespace blockchain {
@@ -45,10 +45,10 @@ public:
     transaction_pool(const settings& settings);
 
     /// The tx exists in the pool.
-    bool exists(transaction_const_ptr tx) const;
+    bool exists(system::transaction_const_ptr tx) const;
 
     /// Remove all message vectors that match transaction hashes.
-    void filter(get_data_ptr message) const;
+    void filter(system::get_data_ptr message) const;
 
     void fetch_template(merkle_block_fetch_handler handler) const;
     void fetch_mempool(size_t count_limit, uint64_t minimum_fee,
@@ -58,9 +58,9 @@ public:
     transaction_entry::list get_mempool() const;
 
     void add_unconfirmed_transactions(
-        const transaction_const_ptr_list& unconfirmed_txs);
+        const system::transaction_const_ptr_list& unconfirmed_txs);
 
-    void remove_transactions(transaction_const_ptr_list& txs);
+    void remove_transactions(system::transaction_const_ptr_list& txs);
 
 private:
     typedef transaction_pool_state::prioritized_transactions::right_map::iterator

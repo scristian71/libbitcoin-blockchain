@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -22,23 +22,24 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/pools/header_branch.hpp>
 
 namespace libbitcoin {
 namespace blockchain {
 
-using namespace bc::chain;
-using namespace bc::machine;
+using namespace bc::system;
+using namespace bc::system::chain;
+using namespace bc::system::machine;
 using namespace std::placeholders;
 
 #define NAME "validate_header"
 
 validate_header::validate_header(dispatcher& dispatch, const fast_chain& chain,
-    const bool scrypt, const bc::settings& bitcoin_settings)
+    const settings& settings, const system::settings& bitcoin_settings)
   : stopped_(true),
     header_populator_(dispatch, chain),
-    scrypt_(scrypt),
+    scrypt_(settings.scrypt_proof_of_work),
     bitcoin_settings_(bitcoin_settings)
 {
 }

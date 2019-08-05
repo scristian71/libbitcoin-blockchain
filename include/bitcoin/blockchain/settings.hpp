@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011-2017 libbitcoin developers (see AUTHORS)
+ * Copyright (c) 2011-2019 libbitcoin developers (see AUTHORS)
  *
  * This file is part of libbitcoin.
  *
@@ -21,7 +21,7 @@
 
 #include <cstdint>
 #include <boost/filesystem.hpp>
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/blockchain/define.hpp>
 
 namespace libbitcoin {
@@ -32,7 +32,7 @@ class BCB_API settings
 {
 public:
     settings();
-    settings(config::settings context);
+    settings(system::config::settings context);
 
     /// Fork flags combiner.
     uint32_t enabled_forks() const;
@@ -40,13 +40,15 @@ public:
     /// Properties.
     uint32_t cores;
     bool priority;
+    bool index_payments;
     bool use_libconsensus;
     float byte_fee_satoshis;
     float sigop_fee_satoshis;
     uint64_t minimum_output_satoshis;
     uint32_t notify_limit_hours;
     uint32_t reorganization_limit;
-    config::checkpoint::list checkpoints;
+    uint32_t block_buffer_limit;
+    system::config::checkpoint::list checkpoints;
     bool difficult;
     bool retarget;
     bool bip16;
@@ -66,8 +68,8 @@ public:
     bool scrypt_proof_of_work;
 
     // Mining/Template inputs
-    bc::config::script coinbase_input;
-    bc::config::script coinbase_output;
+    system::config::script coinbase_input;
+    system::config::script coinbase_output;
     size_t block_sigop_limit;
     size_t block_bytes_limit;
 };
