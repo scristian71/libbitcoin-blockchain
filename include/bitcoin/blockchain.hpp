@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Copyright (c) 2014-2019 libbitcoin-blockchain developers (see COPYING).
+// Copyright (c) 2014-2020 libbitcoin-blockchain developers (see COPYING).
 //
 //        GENERATED SOURCE CODE, DO NOT EDIT EXCEPT EXPERIMENTALLY
 //
@@ -20,6 +20,7 @@
 #include <bitcoin/consensus.hpp>
 #endif
 
+#include <bitcoin/blockchain/block_chain_initializer.hpp>
 #include <bitcoin/blockchain/define.hpp>
 #include <bitcoin/blockchain/settings.hpp>
 #include <bitcoin/blockchain/version.hpp>

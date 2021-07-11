@@ -94,6 +94,26 @@ public:
     bool get_header(system::chain::header& out_header, size_t& out_height,
         const system::hash_digest& block_hash, bool candidate) const;
 
+    /// Get block filter by height.
+    bool get_compact_filter(system::data_chunk& out_filter,
+        system::hash_digest& out_hash, size_t height, uint8_t filter_type,
+        bool candidate) const;
+
+    /// Get block filter by hash.
+    bool get_compact_filter(system::data_chunk& out_filter, size_t& out_height,
+        const system::hash_digest& block_hash, uint8_t filter_type,
+        bool candidate) const;
+
+    /// Get block filter header by height.
+    bool get_compact_filter_header(system::hash_digest& out_filter_header,
+        system::hash_digest& out_hash, size_t height, uint8_t filter_type,
+        bool candidate) const;
+
+    /// Get block filter header by hash.
+    bool get_compact_filter_header(system::hash_digest& out_filter_header,
+        size_t& out_height, const system::hash_digest& block_hash,
+        uint8_t filter_type, bool candidate) const;
+
     /// Get hash of the confirmed or candidate block by index height.
     bool get_block_hash(system::hash_digest& out_hash, size_t height,
         bool candidate) const;
@@ -215,6 +235,9 @@ public:
     /// The candidate chain has greater valid work than the confirmed chain.
     bool is_reorganizable() const;
 
+    ////// The confirmed chain neutrino filter checkpoints at configured interval.
+    ////system::hash_list neutrino_filter_checkpoints() const;
+
     // Chain State
     // ------------------------------------------------------------------------
 
@@ -268,6 +291,30 @@ public:
     /// fetch block header by hash.
     void fetch_block_header(const system::hash_digest& hash,
         block_header_fetch_handler handler) const;
+
+    /// fetch filter by height.
+    void fetch_compact_filter(uint8_t filter_type, size_t height,
+        compact_filter_fetch_handler handler) const;
+
+    /// fetch filter by hash.
+    void fetch_compact_filter(uint8_t filter_type,
+        const system::hash_digest& hash,
+        compact_filter_fetch_handler handler) const;
+
+    /// fetch filter headers by start height, stop hash
+    void fetch_compact_filter_headers(uint8_t filter_type,
+        size_t start_height, const system::hash_digest& stop_hash,
+        compact_filter_headers_fetch_handler handler) const;
+
+    /// fetch filter headers by start height, stop height
+    void fetch_compact_filter_headers(uint8_t filter_type,
+        size_t start_height, size_t stop_height,
+        compact_filter_headers_fetch_handler handler) const;
+
+    /// fetch the filter checkpoint indicated by the type.
+    void fetch_compact_filter_checkpoint(uint8_t filter_type,
+        const system::hash_digest& stop_hash,
+        compact_filter_checkpoint_fetch_handler handler) const;
 
     /// fetch hashes of transactions for a block, by block height.
     void fetch_merkle_block(size_t height,
@@ -394,13 +441,68 @@ protected:
     bool stopped() const;
 
     // Notification senders.
-    void notify(system::transaction_const_ptr tx);
+    virtual void notify(system::transaction_const_ptr tx);
     void notify(size_t fork_height,
         system::header_const_ptr_list_const_ptr incoming,
         system::header_const_ptr_list_const_ptr outgoing);
     void notify(size_t fork_height,
         system::block_const_ptr_list_const_ptr incoming,
         system::block_const_ptr_list_const_ptr outgoing);
+
+    bool get_filter_result(database::filter_result& out_filter,
+        system::hash_digest& out_hash, size_t height, uint8_t filter_type,
+        bool candidate) const;
+
+    bool get_filter_result(database::filter_result& out_filter,
+        size_t& out_height, const system::hash_digest& block_hash,
+        uint8_t filter_type, bool candidate) const;
+
+    // Neutrino filter type handlers
+    bool get_neutrino_filter(system::data_chunk& out_filter,
+        system::hash_digest& out_hash, size_t height, bool candidate) const;
+
+    bool get_neutrino_filter(system::data_chunk& out_filter, size_t& out_height,
+        const system::hash_digest& block_hash, bool candidate) const;
+
+    bool get_neutrino_filter_header(system::hash_digest& out_filter_header,
+        system::hash_digest& out_hash, size_t height, bool candidate) const;
+
+    bool get_neutrino_filter_header(system::hash_digest& out_filter_header,
+        size_t& out_height, const system::hash_digest& block_hash,
+        bool candidate) const;
+
+    void fetch_neutrino_filter(size_t height,
+        compact_filter_fetch_handler handler) const;
+
+    void fetch_neutrino_filter(const system::hash_digest& hash,
+        compact_filter_fetch_handler handler) const;
+
+    void fetch_neutrino_filter_headers(size_t start_height,
+        const system::hash_digest& stop_hash,
+        compact_filter_headers_fetch_handler handler) const;
+
+    void fetch_neutrino_filter_headers(size_t start_height,
+        size_t stop_height,
+        compact_filter_headers_fetch_handler handler) const;
+
+    void fetch_neutrino_filter_headers(size_t start_height,
+        const system::hash_digest& stop_hash, size_t stop_height,
+        const system::hash_digest& stop_filter_header,
+        compact_filter_headers_fetch_handler handler) const;
+
+    void fetch_neutrino_filter_checkpoint(const system::hash_digest& stop_hash,
+        compact_filter_checkpoint_fetch_handler handler) const;
+
+    // Neutrino filter metadata populator.
+    system::code populate_neutrino_filters(
+        system::block_const_ptr_list_const_ptr blocks) const;
+
+    // This is protected by mutex.
+    database::data_base database_;
+
+    // Made protected for testing.
+    system::atomic<system::transaction_const_ptr> last_pool_transaction_;
+    virtual void catalog_transaction(system::transaction_const_ptr tx);
 
 private:
     // Properties.
@@ -414,23 +516,24 @@ private:
     bool set_top_valid_candidate_state();
     bool set_next_confirmed_state();
 
+    bool set_neutrino_filter_checkpoints();
+    bool update_neutrino_filter_checkpoints(size_t fork_height,
+        system::block_const_ptr_list_const_ptr incoming,
+        system::block_const_ptr_list_const_ptr outgoing);
+
     void set_fork_point(const system::config::checkpoint& fork);
     void set_candidate_work(const system::uint256_t& work_above_fork);
     void set_confirmed_work(const system::uint256_t& work_above_fork);
     void set_top_candidate_state(system::chain::chain_state::ptr top);
     void set_top_valid_candidate_state(system::chain::chain_state::ptr top);
     void set_next_confirmed_state(system::chain::chain_state::ptr top);
+    void set_neutrino_filter_checkpoints(system::hash_list&& checkpoints);
 
     // Utilities.
-    void catalog_block(system::block_const_ptr block);
-    void catalog_transaction(system::transaction_const_ptr tx);
     bool get_transactions(system::chain::transaction::list& out_transactions,
         const database::block_result& result, bool witness) const;
     bool get_transaction_hashes(system::hash_list& out_hashes,
         const database::block_result& result) const;
-
-    // This is protected by mutex.
-    database::data_base database_;
 
     // These are thread safe.
     std::atomic<bool> stopped_;
@@ -439,7 +542,6 @@ private:
     system::atomic<system::uint256_t> candidate_work_;
     system::atomic<system::uint256_t> confirmed_work_;
     system::atomic<system::block_const_ptr> last_confirmed_block_;
-    system::atomic<system::transaction_const_ptr> last_pool_transaction_;
     system::atomic<system::chain::chain_state::ptr> top_candidate_state_;
     system::atomic<system::chain::chain_state::ptr> top_valid_candidate_state_;
     system::atomic<system::chain::chain_state::ptr> next_confirmed_state_;

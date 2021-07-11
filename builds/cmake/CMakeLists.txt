@@ -1,5 +1,5 @@
 ###############################################################################
-#  Copyright (c) 2014-2019 libbitcoin-blockchain developers (see COPYING).
+#  Copyright (c) 2014-2020 libbitcoin-blockchain developers (see COPYING).
 #
 #         GENERATED SOURCE CODE, DO NOT EDIT EXCEPT EXPERIMENTALLY
 #
@@ -101,7 +101,7 @@ endif()
 
 # Find boost
 #------------------------------------------------------------------------------
-find_package( Boost 1.62.0 REQUIRED COMPONENTS
+find_package( Boost 1.72.0 REQUIRED COMPONENTS
     unit_test_framework )
 
 set( boost_unit_test_framework_LIBS "-lboost_unit_test_framework" )
@@ -140,11 +140,11 @@ endif()
 # Define project common library directories
 #------------------------------------------------------------------------------
 if (BUILD_SHARED_LIBS)
-    link_directories( 
+    link_directories(
         ${bitcoin_database_LIBRARY_DIRS}
         ${bitcoin_consensus_LIBRARY_DIRS} )
 else()
-    link_directories( 
+    link_directories(
         ${bitcoin_database_STATIC_LIBRARY_DIRS}
         ${bitcoin_consensus_STATIC_LIBRARY_DIRS} )
 endif()
@@ -152,13 +152,13 @@ endif()
 # Define project common libraries/linker flags.
 #------------------------------------------------------------------------------
 if (BUILD_SHARED_LIBS)
-    link_libraries( 
+    link_libraries(
         "-fstack-protector"
         "-fstack-protector-all"
         ${bitcoin_database_LIBRARIES}
         ${bitcoin_consensus_LIBRARIES} )
 else()
-    link_libraries( 
+    link_libraries(
         "-fstack-protector"
         "-fstack-protector-all"
         ${bitcoin_database_STATIC_LIBRARIES}
@@ -168,6 +168,7 @@ endif()
 # Define ${CANONICAL_LIB_NAME} project.
 #------------------------------------------------------------------------------
 add_library( ${CANONICAL_LIB_NAME}
+    "../../src/block_chain_initializer.cpp"
     "../../src/settings.cpp"
     "../../src/interface/block_chain.cpp"
     "../../src/organizers/organize_block.cpp"

@@ -41,11 +41,10 @@ using namespace std::placeholders;
 
 #define NAME "block_chain"
 
-block_chain::block_chain(threadpool& pool,
-    const blockchain::settings& settings,
+block_chain::block_chain(threadpool& pool, const blockchain::settings& settings,
     const database::settings& database_settings,
     const system::settings& bitcoin_settings)
-  : database_(database_settings, settings.index_payments),
+  : database_(database_settings, settings.index_payments, settings.bip158),
     stopped_(true),
     fork_point_({ null_hash, 0 }),
     settings_(settings),
@@ -61,7 +60,8 @@ block_chain::block_chain(threadpool& pool,
     transaction_pool_(settings),
 
     // Create dispatcher for priority operations.
-    priority_pool_(thread_ceiling(settings.cores) + 1u, priority(settings.priority)),
+    priority_pool_(
+        thread_ceiling(settings.cores) + 1u, priority(settings.priority)),
     priority_dispatch_(priority_pool_, NAME "_dispatch"),
 
     organize_header_(candidate_mutex_, priority_dispatch_, pool, *this,
@@ -73,8 +73,10 @@ block_chain::block_chain(threadpool& pool,
 
     // Subscriber thread pools are only used for unsubscribe, otherwise invoke.
     block_subscriber_(std::make_shared<block_subscriber>(pool, NAME "_block")),
-    header_subscriber_(std::make_shared<header_subscriber>(pool, NAME "_header")),
-    transaction_subscriber_(std::make_shared<transaction_subscriber>(pool, NAME "_tx"))
+    header_subscriber_(
+        std::make_shared<header_subscriber>(pool, NAME "_header")),
+    transaction_subscriber_(
+        std::make_shared<transaction_subscriber>(pool, NAME "_tx"))
 {
 }
 
@@ -138,6 +140,183 @@ bool block_chain::get_header(chain::header& out_header, size_t& out_height,
     if (database_.blocks().get(height, candidate))
     {
         out_header = result.header();
+        out_height = height;
+        return true;
+    }
+
+    return false;
+}
+
+bool block_chain::get_compact_filter(system::data_chunk& out_filter,
+    system::hash_digest& out_hash, size_t height, uint8_t filter_type,
+    bool candidate) const
+{
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            return get_neutrino_filter(out_filter, out_hash, height, candidate);
+            break;
+        default:
+            break;
+    }
+
+    return false;
+}
+
+bool block_chain::get_neutrino_filter(system::data_chunk& out_filter,
+    system::hash_digest& out_hash, size_t height, bool candidate) const
+{
+    if (!settings_.bip158)
+        return false;
+
+    const auto result = database_.blocks().get(height, candidate);
+
+    if (!result)
+        return false;
+
+    const auto result_filter = database_.neutrino_filters().get(
+        result.neutrino_filter());
+
+    if (!result_filter)
+        return false;
+
+    out_filter = result_filter.filter();
+    out_hash = result.hash();
+    return true;
+}
+
+bool block_chain::get_compact_filter(system::data_chunk& out_filter,
+    size_t& out_height, const system::hash_digest& block_hash,
+    uint8_t filter_type, bool candidate) const
+{
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            return get_neutrino_filter(out_filter, out_height, block_hash,
+                candidate);
+            break;
+        default:
+            break;
+    }
+
+    return false;
+}
+
+bool block_chain::get_neutrino_filter(system::data_chunk& out_filter,
+    size_t& out_height, const system::hash_digest& block_hash,
+    bool candidate) const
+{
+    if (!settings_.bip158)
+        return false;
+
+    const auto result = database_.blocks().get(block_hash);
+
+    if (!result)
+        return false;
+
+    const auto height = result.height();
+
+    // The only way to know if a header is indexed is from its presence in the
+    // index. It will not be marked as a candidate until validated as such.
+    if (database_.blocks().get(height, candidate))
+    {
+        const auto result_filter = database_.neutrino_filters().get(
+            result.neutrino_filter());
+
+        if (!result_filter)
+            return false;
+
+        out_filter = result_filter.filter();
+        out_height = height;
+        return true;
+    }
+
+    return false;
+}
+
+bool block_chain::get_compact_filter_header(
+    system::hash_digest& out_filter_header, system::hash_digest& out_hash,
+    size_t height, uint8_t filter_type, bool candidate) const
+{
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            return get_neutrino_filter_header(out_filter_header, out_hash,
+                height, candidate);
+            break;
+        default:
+            break;
+    }
+
+    return false;
+}
+
+bool block_chain::get_neutrino_filter_header(
+    system::hash_digest& out_filter_header, system::hash_digest& out_hash,
+    size_t height, bool candidate) const
+{
+    if (!settings_.bip158)
+        return false;
+
+    const auto result = database_.blocks().get(height, candidate);
+
+    if (!result)
+        return false;
+
+    const auto result_filter = database_.neutrino_filters().get(
+        result.neutrino_filter());
+
+    if (!result_filter)
+        return false;
+
+    out_filter_header = result_filter.header();
+    out_hash = result.hash();
+    return true;
+}
+
+bool block_chain::get_compact_filter_header(
+    system::hash_digest& out_filter_header, size_t& out_height,
+    const system::hash_digest& block_hash, uint8_t filter_type,
+    bool candidate) const
+{
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            return get_neutrino_filter_header(out_filter_header, out_height,
+                block_hash, candidate);
+            break;
+        default:
+            break;
+    }
+
+    return false;
+}
+
+bool block_chain::get_neutrino_filter_header(
+    system::hash_digest& out_filter_header, size_t& out_height,
+    const system::hash_digest& block_hash, bool candidate) const
+{
+    if (!settings_.bip158)
+        return false;
+
+    const auto result = database_.blocks().get(block_hash);
+
+    if (!result)
+        return false;
+
+    const auto height = result.height();
+
+    // The only way to know if a header is indexed is from its presence in the
+    // index. It will not be marked as a candidate until validated as such.
+    if (database_.blocks().get(height, candidate))
+    {
+        const auto result_filter = database_.neutrino_filters().get(
+            result.neutrino_filter());
+
+        if (!result_filter)
+            return false;
+
+        out_filter_header = result_filter.header();
         out_height = height;
         return true;
     }
@@ -218,7 +397,7 @@ bool block_chain::get_work(uint256_t& out_work, const uint256_t& overcome,
     const auto no_maximum = overcome.is_zero();
 
     for (auto height = top; (height > above_height) &&
-        (no_maximum || out_work <= overcome); --height)
+        (no_maximum || out_work < overcome); --height)
     {
         const auto result = database_.blocks().get(height, candidate);
 
@@ -277,6 +456,72 @@ void block_chain::populate_pool_transaction(const chain::transaction& tx,
     uint32_t forks) const
 {
     database_.transactions().get_pool_metadata(tx, forks);
+}
+
+code block_chain::populate_neutrino_filters(
+    block_const_ptr_list_const_ptr blocks) const
+{
+    static const auto form = "Block [%s] halts neutrino filter calculation due to missing metadata";
+
+    if (!settings_.bip158)
+        return error::success;
+
+    if (!blocks)
+        return error::success;
+
+    auto previous_filter_header = null_hash;
+
+    if (blocks->size() > 0)
+    {
+        const auto& header = blocks->front()->header();
+        if (!header.metadata.neutrino_filter)
+        {
+            const auto result_previous_block = database_.blocks().get(
+                header.previous_block_hash());
+
+            BITCOIN_ASSERT(result_previous_block);
+            if (!result_previous_block)
+                return error::invalid_previous_block;
+
+            const auto result_prev_filter = database_.neutrino_filters().get(
+                result_previous_block.neutrino_filter());
+
+            BITCOIN_ASSERT(result_prev_filter);
+            if (!result_prev_filter)
+                return error::invalid_previous_block;
+
+            previous_filter_header = result_prev_filter.header();
+        }
+    }
+
+    for (const auto& block: *blocks)
+    {
+        const auto& header = block->header();
+        if (header.metadata.neutrino_filter)
+        {
+            previous_filter_header = header.metadata.neutrino_filter->header();
+            continue;
+        }
+
+        data_chunk filter;
+        if (!system::neutrino::compute_filter(*block, filter))
+        {
+            LOG_ERROR(LOG_BLOCKCHAIN)
+                << boost::format(form) % encode_hash(block->hash());
+
+            return error::metadata_prevout_missing;
+        }
+
+        const auto filter_header = system::neutrino::compute_filter_header(
+            previous_filter_header, filter);
+
+        header.metadata.neutrino_filter = std::make_shared<chain::block_filter>(
+            neutrino_filter_type, block->hash(), filter_header, filter);
+
+        previous_filter_header = filter_header;
+    }
+
+    return error::success;
 }
 
 bool block_chain::populate_block_output(const chain::output_point& outpoint,
@@ -339,24 +584,6 @@ header_const_ptr block_chain::get_header(size_t height, bool candidate) const
 
 // Writers
 // ----------------------------------------------------------------------------
-
-// private
-void block_chain::catalog_block(block_const_ptr block)
-{
-    if (!settings_.index_payments)
-        return;
-
-    code ec;
-    if ((ec = database_.catalog(*block)))
-    {
-        LOG_FATAL(LOG_BLOCKCHAIN)
-            << "Failure in block payment indexing, store is now corrupt: "
-            << ec.message();
-
-        // In the case of a store failure the server stops processing.
-        stop();
-    }
-}
 
 // private
 void block_chain::catalog_transaction(transaction_const_ptr tx)
@@ -502,7 +729,7 @@ code block_chain::invalidate(block_const_ptr block, size_t block_height)
         outgoing->push_back(get_header(height, true));
 
     // Mark all outgoing candidate blocks as invalid, in store and metadata.
-    for (const auto header: *outgoing)
+    for (const auto& header: *outgoing)
         if ((ec = invalidate(*header, error::store_block_missing_parent)))
             return ec;
 
@@ -524,16 +751,13 @@ code block_chain::candidate(block_const_ptr block)
     const auto& header = block->header();
     BITCOIN_ASSERT(!header.metadata.error);
 
-    // Mark candidate block valid, txs and outputs spent by them as candidate.
+    // Mark valid, txs/outputs as candidate, store filter/payments.
     if ((ec = database_.candidate(*block)))
         return ec;
 
     // Advance the top valid candidate state and candidate work.
     set_top_valid_candidate_state(header.metadata.state);
     set_candidate_work(candidate_work() + header.proof());
-
-    if (settings_.index_payments)
-        catalog_block(block);
 
     return ec;
 }
@@ -579,11 +803,15 @@ code block_chain::reorganize(block_const_ptr_list_const_ptr branch_cache,
 
     // Append all (validated) candidate pointers from the branch cache.
     // Clear chain state to preserve memory and hide from subscribers.
-    for (const auto block: *branch_cache)
+    for (const auto& block: *branch_cache)
     {
         block->header().metadata.state.reset();
         incoming->push_back(block);
     }
+
+    // Conditionally compute neutrino filters for all incoming blocks
+    if ((ec = populate_neutrino_filters(incoming)))
+        return ec;
 
     // This unmarks candidate txs and spent outputs (because confirmed).
     // Header metadata median_time_past must be set on all incoming blocks.
@@ -1069,6 +1297,405 @@ void block_chain::fetch_block_header(const hash_digest& hash,
     handler(error::success, message, result.height());
 }
 
+void block_chain::fetch_compact_filter(uint8_t filter_type, size_t height,
+    compact_filter_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr, 0);
+        return;
+    }
+
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            fetch_neutrino_filter(height, handler);
+            break;
+
+        default:
+            handler(error::unrecognized_filter_type, nullptr, 0);
+            break;
+    }
+}
+
+void block_chain::fetch_neutrino_filter(size_t height,
+    compact_filter_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr, 0);
+        return;
+    }
+
+    if (!settings_.bip158)
+    {
+        handler(error::configuration_disabled, nullptr, 0);
+        return;
+    }
+
+    const auto result = database_.blocks().get(height, false);
+
+    if (!result)
+    {
+        handler(error::not_found, nullptr, 0);
+        return;
+    }
+
+    BITCOIN_ASSERT(result.height() == height);
+    const auto result_filter = database_.neutrino_filters().get(
+        result.neutrino_filter());
+
+    if (!result_filter)
+    {
+        handler(error::not_found, nullptr, 0);
+        return;
+    }
+
+    const auto message = std::make_shared<compact_filter>(
+        neutrino_filter_type, result.hash(), result_filter.filter());
+
+    handler(error::success, message, result.height());
+}
+
+void block_chain::fetch_compact_filter(uint8_t filter_type,
+    const hash_digest& hash, compact_filter_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr, 0);
+        return;
+    }
+
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            fetch_neutrino_filter(hash, handler);
+            break;
+
+        default:
+            handler(error::unrecognized_filter_type, nullptr, 0);
+            break;
+    }
+}
+
+void block_chain::fetch_neutrino_filter(const hash_digest& hash,
+    compact_filter_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr, 0);
+        return;
+    }
+
+    if (!settings_.bip158)
+    {
+        handler(error::configuration_disabled, nullptr, 0);
+        return;
+    }
+
+    const auto result = database_.blocks().get(hash);
+
+    if (!result)
+    {
+        handler(error::not_found, nullptr, 0);
+        return;
+    }
+
+    const auto result_filter = database_.neutrino_filters().get(
+        result.neutrino_filter());
+
+    if (!result_filter)
+    {
+        handler(error::not_found, nullptr, 0);
+        return;
+    }
+
+    const auto message = std::make_shared<compact_filter>(
+        neutrino_filter_type, result.hash(), result_filter.filter());
+
+    handler(error::success, message, result.height());
+}
+
+void block_chain::fetch_compact_filter_headers(uint8_t filter_type,
+    size_t start_height, const system::hash_digest& stop_hash,
+    compact_filter_headers_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr);
+        return;
+    }
+
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            fetch_neutrino_filter_headers(start_height, stop_hash, handler);
+            break;
+
+        default:
+            handler(error::unrecognized_filter_type, nullptr);
+            break;
+    }
+}
+
+void block_chain::fetch_neutrino_filter_headers(size_t start_height,
+    const system::hash_digest& stop_hash,
+    compact_filter_headers_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr);
+        return;
+    }
+
+    size_t stop_height = 0;
+    auto stop_filter_header = null_hash;
+
+    if (stop_hash != null_hash)
+    {
+        const auto result = database_.blocks().get(stop_hash);
+
+        if (!result)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        stop_height = result.height();
+
+        const auto result_filter = database_.neutrino_filters().get(
+            result.neutrino_filter());
+
+        if (!result_filter)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        stop_filter_header = result_filter.header();
+    }
+
+    if (start_height > stop_height)
+    {
+        handler(error::invalid_response_range, nullptr);
+        return;
+    }
+
+    fetch_neutrino_filter_headers(start_height, stop_hash, stop_height,
+        stop_filter_header, handler);
+}
+
+void block_chain::fetch_compact_filter_headers(uint8_t filter_type,
+    size_t start_height, size_t stop_height,
+    compact_filter_headers_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr);
+        return;
+    }
+
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            fetch_neutrino_filter_headers(start_height, stop_height, handler);
+            break;
+
+        default:
+            handler(error::unrecognized_filter_type, nullptr);
+            break;
+    }
+}
+
+void block_chain::fetch_neutrino_filter_headers(size_t start_height,
+    size_t stop_height, compact_filter_headers_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr);
+        return;
+    }
+
+    if (start_height > stop_height)
+    {
+        handler(error::invalid_response_range, nullptr);
+        return;
+    }
+
+    auto stop_hash = null_hash;
+    auto stop_filter_header = null_hash;
+
+    {
+        const auto result = database_.blocks().get(stop_height, false);
+
+        if (!result)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        stop_hash = result.hash();
+
+        const auto result_filter = database_.neutrino_filters().get(
+            result.neutrino_filter());
+
+        if (!result_filter)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        stop_filter_header = result_filter.header();
+    }
+
+    fetch_neutrino_filter_headers(start_height, stop_hash, stop_height,
+        stop_filter_header, handler);
+}
+
+void block_chain::fetch_neutrino_filter_headers(size_t start_height,
+    const hash_digest& stop_hash, size_t stop_height,
+    const hash_digest& stop_filter_header,
+    compact_filter_headers_fetch_handler handler) const
+{
+    auto previous_filter_header = null_hash;
+
+    if (start_height > 0)
+    {
+        const auto result = database_.blocks().get(start_height - 1u, false);
+
+        if (!result)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        const auto result_filter = database_.neutrino_filters().get(
+            result.neutrino_filter());
+
+        if (!result_filter)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        previous_filter_header = result_filter.header();
+    }
+
+    // Guard against subtraction underflow and loop index overflow.
+    if (start_height > stop_height || stop_height == max_size_t)
+    {
+        handler(error::invalid_response_range, nullptr);
+        return;
+    }
+
+    const auto count = stop_height - start_height;
+
+    if (count >= max_get_compact_filter_headers)
+    {
+        handler(error::invalid_response_range, nullptr);
+        return;
+    }
+
+    auto message = std::make_shared<compact_filter_headers>();
+    message->set_filter_type(bc::neutrino_filter_type);
+    message->set_stop_hash(stop_hash);
+    message->set_previous_filter_header(previous_filter_header);
+    message->filter_hashes().reserve(count);
+    message->filter_hashes().push_back(stop_filter_header);
+
+    for (auto height = start_height; height <= stop_height; ++height)
+    {
+        const auto result = database_.blocks().get(height, false);
+
+        if (!result)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        const auto result_filter = database_.neutrino_filters().get(
+            result.neutrino_filter());
+
+        if (!result_filter)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        message->filter_hashes().push_back(result_filter.header());
+    }
+
+     handler(error::success, std::move(message));
+}
+
+void block_chain::fetch_compact_filter_checkpoint(uint8_t filter_type,
+    const system::hash_digest& stop_hash,
+    compact_filter_checkpoint_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr);
+        return;
+    }
+
+    switch (filter_type)
+    {
+        case bc::neutrino_filter_type:
+            fetch_neutrino_filter_checkpoint(stop_hash, handler);
+            break;
+
+        default:
+            handler(error::unrecognized_filter_type, nullptr);
+            break;
+    }
+}
+
+void block_chain::fetch_neutrino_filter_checkpoint(
+    const system::hash_digest& stop_hash,
+    compact_filter_checkpoint_fetch_handler handler) const
+{
+    if (stopped())
+    {
+        handler(error::service_stopped, nullptr);
+        return;
+    }
+
+    auto headers = database_.neutrino_filters().checkpoints();
+    size_t stop_height = 0;
+
+    if (stop_hash != null_hash)
+    {
+        const auto result = database_.blocks().get(stop_hash);
+
+        if (!result)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+
+        stop_height = result.height();
+
+        const auto result_filter = database_.neutrino_filters().get(
+            result.neutrino_filter());
+
+        if (!result_filter)
+        {
+            handler(error::not_found, nullptr);
+            return;
+        }
+    }
+
+    const auto interval = compact_filter_checkpoint_interval;
+    headers.resize(stop_height / interval);
+
+    auto copy_stop_hash = stop_hash;
+    auto message = std::make_shared<compact_filter_checkpoint>(
+        bc::neutrino_filter_type, std::move(copy_stop_hash),
+        std::move(headers));
+
+     handler(error::success, std::move(message));
+}
+
 void block_chain::fetch_merkle_block(size_t height,
     merkle_block_fetch_handler handler) const
 {
@@ -1209,7 +1836,7 @@ void block_chain::fetch_transaction(const hash_digest& hash,
 
     const auto result = database_.transactions().get(hash);
 
-    if (!result || (require_confirmed && result.position() !=
+    if (!result || (require_confirmed && result.position() ==
         transaction_result::unconfirmed))
     {
         handler(error::not_found, nullptr, 0, 0);
@@ -1248,7 +1875,7 @@ void block_chain::fetch_transaction_position(const hash_digest& hash,
 
     const auto result = database_.transactions().get(hash);
 
-    if (!result || (require_confirmed && result.position() !=
+    if (!result || (require_confirmed && result.position() ==
         transaction_result::unconfirmed))
     {
         handler(error::not_found, 0, 0);
@@ -1533,7 +2160,7 @@ void block_chain::fetch_history(const hash_digest& key, size_t limit,
     size_t count = 0;
 
     // Records are no longer ordered by height (but are reverse order in tx).
-    for (auto payment: database_.addresses().get(key))
+    for (auto payment: database_.payments().get(key))
     {
         // The limit is not so useful due to lack of ordering.
         if ((limit != 0) && (count++ == limit))

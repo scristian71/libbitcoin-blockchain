@@ -54,6 +54,7 @@ public:
     bool bip16;
     bool bip30;
     bool bip34;
+    bool bip42;
     bool bip66;
     bool bip65;
     bool bip90;
@@ -63,6 +64,7 @@ public:
     bool bip141;
     bool bip143;
     bool bip147;
+    bool bip158;
     bool time_warp_patch;
     bool retarget_overflow_patch;
     bool scrypt_proof_of_work;
